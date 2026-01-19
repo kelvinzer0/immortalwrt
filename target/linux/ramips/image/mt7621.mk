@@ -3162,3 +3162,12 @@ define Device/zyxel_wsm20
   KERNEL_INITRAMFS := kernel-bin | lzma | fit lzma $$(KDIR)/image-$$(firstword $$(DEVICE_DTS)).dtb | znet-header V1.00(ABZF.0)C0
 endef
 TARGET_DEVICES += zyxel_wsm20
+
+define Device/360_360t6gs
+  $(Device/dsa-migration)
+  IMAGE_SIZE := 15872k
+  DEVICE_VENDOR := 360
+  DEVICE_MODEL := 360T6GS
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7915-firmware
+endef
+TARGET_DEVICES += 360_360t6gs
