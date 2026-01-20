@@ -3168,11 +3168,6 @@ define Device/360_360t6gs
   IMAGE_SIZE := 15872k
   DEVICE_VENDOR := 360
   DEVICE_MODEL := 360T6GS
-  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7915-firmware \
-    opennds uhttpd php7-cgi php7-mod-openssl
-  KERNEL := $(KERNEL_DTB) | uImage lzma
-  IMAGES += factory.bin
-  IMAGE/factory.bin := append-kernel | pad-to $$$$(KERNEL_SIZE) | append-ubi | check-size
-  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7915-firmware opennds uhttpd php7-cgi php7-mod-openssl
 endef
 TARGET_DEVICES += 360_360t6gs
