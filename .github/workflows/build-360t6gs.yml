@@ -13,8 +13,6 @@ on:
 env:
   REPO_URL: https://github.com/immortalwrt/immortalwrt
   REPO_BRANCH: openwrt-23.05
-  CONFIG_FILE: .config
-  DIY_SCRIPT: diy-script.sh
   UPLOAD_BIN_DIR: true
   UPLOAD_FIRMWARE: true
   UPLOAD_RELEASE: true
@@ -43,14 +41,26 @@ jobs:
     - name: Clone source code
       run: |
         df -hT $PWD
-        git clone $REPO_URL -b $REPO_BRANCH openwrt
+        git clone --depth=1 $REPO_URL -b $REPO_BRANCH openwrt
         cd openwrt
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
 
     - name: Copy custom files
       run: |
-        cp -f target/linux/ramips/dts/mt7621_360_360t6gs.dts openwrt/target/linux/ramips/dts/
-        cp -f target/linux/ramips/image/mt7621.mk openwrt/target/linux/ramips/image/
+        # Check if custom files exist
+        if [ -f target/linux/ramips/dts/mt7621_360_360t6gs.dts ]; then
+          cp -f target/linux/ramips/dts/mt7621_360_360t6gs.dts $OPENWRT_PATH/target/linux/ramips/dts/
+          echo "✓ DTS file copied"
+        else
+          echo "⚠ DTS file not found, using default"
+        fi
+        
+        if [ -f target/linux/ramips/image/mt7621.mk ]; then
+          cp -f target/linux/ramips/image/mt7621.mk $OPENWRT_PATH/target/linux/ramips/image/
+          echo "✓ Image makefile copied"
+        else
+          echo "⚠ Image makefile not found, using default"
+        fi
 
     - name: Update feeds
       run: |
@@ -65,14 +75,41 @@ jobs:
         CONFIG_TARGET_ramips=y
         CONFIG_TARGET_ramips_mt7621=y
         CONFIG_TARGET_ramips_mt7621_DEVICE_360_360t6gs=y
-        CONFIG_PACKAGE_luci=y
-        CONFIG_PACKAGE_luci-ssl-openssl=y
-        CONFIG_PACKAGE_luci-theme-bootstrap=y
-        CONFIG_PACKAGE_luci-i18n-base-ru=y
+        
+        # Remove Luci (save space for 16MB flash)
+        # CONFIG_PACKAGE_luci is not set
+        # CONFIG_PACKAGE_luci-ssl-openssl is not set
+        
+        # WiFi drivers
         CONFIG_PACKAGE_kmod-mt7915e=y
         CONFIG_PACKAGE_kmod-mt7915-firmware=y
+        
+        # Captive portal & PHP
+        CONFIG_PACKAGE_opennds=y
+        CONFIG_PACKAGE_uhttpd=y
+        CONFIG_PACKAGE_php7-cgi=y
+        CONFIG_PACKAGE_php7-mod-openssl=y
+        
+        # DNS
+        # CONFIG_PACKAGE_dnsmasq is not set
+        CONFIG_PACKAGE_dnsmasq-full=y
+        
+        # Remove unnecessary packages
+        # CONFIG_PACKAGE_ppp is not set
+        # CONFIG_PACKAGE_ppp-mod-pppoe is not set
+        
         EOF
+        
+        # Apply defconfig
         make defconfig
+        
+        # Show final config
+        echo "=== Final configuration ==="
+        grep "CONFIG_TARGET" .config
+        grep "CONFIG_PACKAGE_kmod-mt79" .config
+        grep "CONFIG_PACKAGE_opennds" .config
+        grep "CONFIG_PACKAGE_php" .config
+        grep "CONFIG_PACKAGE_dnsmasq" .config
 
     - name: Download package
       id: package
@@ -87,7 +124,7 @@ jobs:
       run: |
         cd $OPENWRT_PATH
         echo -e "$(nproc) thread compile"
-        make -j$(nproc) || make -j1 || make -j1 V=s
+        make -j$(nproc) || make -j1 V=s
         echo "status=success" >> $GITHUB_OUTPUT
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV
@@ -108,8 +145,46 @@ jobs:
       id: organize
       if: env.UPLOAD_FIRMWARE == 'true' && !cancelled()
       run: |
-        cd $OPENWRT_PATH/bin/targets/*/*
+        set -e
+        
+        echo "=== Checking build results ==="
+        if [ ! -d "$OPENWRT_PATH/bin/targets" ]; then
+          echo "::error::Build failed - bin/targets not found"
+          exit 1
+        fi
+        
+        # Find firmware directory
+        FIRMWARE_DIR=$(find $OPENWRT_PATH/bin/targets -type d -maxdepth 2 -mindepth 2 | head -n1)
+        
+        if [ -z "$FIRMWARE_DIR" ]; then
+          echo "::error::No firmware built. Check compile logs."
+          ls -la $OPENWRT_PATH/bin/targets/ || true
+          exit 1
+        fi
+        
+        echo "Found firmware at: $FIRMWARE_DIR"
+        cd "$FIRMWARE_DIR"
+        
+        # Remove packages to save space
         rm -rf packages
+        
+        # List built firmware files
+        echo "=== Built firmware files ==="
+        ls -lh *.bin 2>/dev/null || echo "::warning::No .bin files found"
+        
+        # Check firmware size
+        for file in *.bin; do
+          if [ -f "$file" ]; then
+            SIZE=$(stat -c%s "$file")
+            SIZE_MB=$((SIZE / 1024 / 1024))
+            echo "  $file: ${SIZE_MB}MB"
+            if [ $SIZE_MB -gt 15 ]; then
+              echo "::warning::Firmware size (${SIZE_MB}MB) exceeds 15MB - may not fit in 16MB flash!"
+            fi
+          fi
+        done
+        
+        # Export for next steps
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
 
@@ -124,10 +199,55 @@ jobs:
       id: tag
       if: env.UPLOAD_RELEASE == 'true' && !cancelled()
       run: |
+        cd $FIRMWARE
+        
         echo "release_tag=$(date +"%Y.%m.%d-%H%M")" >> $GITHUB_OUTPUT
-        touch release.txt
-        echo "## ImmortalWrt Firmware for 360T6GS" >> release.txt
-        echo "### Build Date: $(date +"%Y-%m-%d %H:%M:%S")" >> release.txt
+        
+        cat > release.txt <<EOF
+        ## ImmortalWrt Firmware for 360T6GS
+        
+        ### Build Information
+        - **Build Date**: $(date +"%Y-%m-%d %H:%M:%S")
+        - **Branch**: $REPO_BRANCH
+        - **Target**: ramips/mt7621
+        
+        ### Included Packages
+        - WiFi: MT7915E driver + firmware
+        - Captive Portal: openNDS
+        - Web Server: uhttpd
+        - PHP: PHP7 with OpenSSL support
+        - DNS: dnsmasq-full
+        
+        ### Firmware Files
+        EOF
+        
+        for file in *.bin; do
+          if [ -f "$file" ]; then
+            SIZE=$(stat -c%s "$file")
+            SIZE_MB=$((SIZE / 1024 / 1024))
+            echo "- \`$file\` (${SIZE_MB}MB)" >> release.txt
+          fi
+        done
+        
+        cat >> release.txt <<EOF
+        
+        ### Installation Notes
+        ⚠️ **WARNING**: This device has only 16MB flash storage!
+        
+        1. Flash \`*-initramfs-kernel.bin\` via Breed bootloader first
+        2. Boot into OpenWrt (running from RAM)
+        3. Upload \`*-squashfs-sysupgrade.bin\` via SSH
+        4. Run: \`sysupgrade -n /tmp/sysupgrade.bin\`
+        
+        ### Default Settings
+        - IP: 192.168.1.1
+        - Username: root
+        - Password: (empty)
+        - LuCI: **NOT INCLUDED** (use SSH/CLI)
+        
+        EOF
+        
+        cat release.txt
         echo "status=success" >> $GITHUB_OUTPUT
 
     - name: Upload firmware to release
@@ -137,7 +257,7 @@ jobs:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       with:
         tag_name: ${{ steps.tag.outputs.release_tag }}
-        body_path: release.txt
+        body_path: ${{ env.FIRMWARE }}/release.txt
         files: ${{ env.FIRMWARE }}/*
 
     - name: Delete workflow runs
