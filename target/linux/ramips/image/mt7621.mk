@@ -3164,17 +3164,14 @@ endef
 TARGET_DEVICES += zyxel_wsm20
 
 define Device/360_360t6gs
+  $(Device/dsa-migration)
   IMAGE_SIZE := 15872k
   DEVICE_VENDOR := 360
   DEVICE_MODEL := 360T6GS
   DEVICE_PACKAGES := kmod-mt7915e kmod-mt7915-firmware \
     opennds uhttpd php7-cgi php7-mod-openssl \
-    -dnsmasq +dnsmasq-full -luci* -ppp*
-  # Ini otomatis generate initramfs + sysupgrade
-  KERNEL := $(KERNEL_DTB) | uImage lzma
-  KERNEL_INITRAMFS := $(KERNEL_DTB) | uImage lzma
-  IMAGES += factory.bin
-  IMAGE/factory.bin := append-kernel | pad-to $$$$(BLOCKSIZE) | append-ubi
-  IMAGE/sysupgrade.bin := sysupgrade-tar | append-metadata
+    -dnsmasq +dnsmasq-full \
+    -luci -luci-ssl -luci-base \
+    -ppp -ppp-mod-pppoe
 endef
 TARGET_DEVICES += 360_360t6gs
