@@ -3168,6 +3168,6 @@ define Device/360_360t6gs
   IMAGE_SIZE := 15872k
   DEVICE_VENDOR := 360
   DEVICE_MODEL := 360T6GS
-  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7915-firmware opennds uhttpd php7-cgi php7-mod-openssl
+  DEVICE_PACKAGES := kmod-mt7915e kmod-mt7915-firmware -uboot-envtools
 endef
 TARGET_DEVICES += 360_360t6gs
