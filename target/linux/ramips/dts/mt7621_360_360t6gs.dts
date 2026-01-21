@@ -177,7 +177,7 @@
 			flash@0 {
 				compatible = "jedec,spi-nor";
 				reg = <0x00>;
-				spi-max-frequency = <0x4c4b400>;
+				spi-max-frequency = <10000000>;
 				m25p,fast-read;
 
 				partitions {
@@ -220,18 +220,8 @@
 					// Firmware dibagi kernel + rootfs
 					partition@50000 {
 						label = "kernel";
-						reg = <0x50000 0x2C0000>;   // bulatkan size ke kelipatan 0x10000
+						reg = <0x50000 0xfb0000>; 
 						compatible = "denx,uimage";
-					};
-
-					partition@2F5000 {               // mulai setelah kernel
-						label = "rootfs";
-						reg = <0x2F5000 0xCCB000>;   // bulatkan size ke kelipatan 0x10000
-					};
-
-					partition@FC0000 {
-						label = "rootfs_data";
-						reg = <0xFC0000 0x6F0000>;   // tetap seperti sekarang
 					};
 				};
 			};
