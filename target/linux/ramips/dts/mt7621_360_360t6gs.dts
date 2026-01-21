@@ -219,7 +219,7 @@
 
 					// Firmware dibagi kernel + rootfs
 					partition@50000 {
-						label = "kernel";
+						label = "firmware";
 						reg = <0x50000 0xfb0000>; 
 						compatible = "denx,uimage";
 					};
