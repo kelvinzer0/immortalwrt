@@ -37,14 +37,12 @@ jobs:
         sudo -E apt-get -qq autoremove --purge
         sudo -E apt-get -qq clean
         sudo timedatectl set-timezone "$TZ"
-
     - name: Clone source code
       run: |
         df -hT $PWD
         git clone --depth=1 $REPO_URL -b $REPO_BRANCH openwrt
         cd openwrt
         echo "OPENWRT_PATH=$PWD" >> $GITHUB_ENV
-
     - name: Copy custom files
       run: |
         # Check if custom files exist
@@ -61,13 +59,11 @@ jobs:
         else
           echo "⚠ Image makefile not found, using default"
         fi
-
     - name: Update feeds
       run: |
         cd $OPENWRT_PATH
         ./scripts/feeds update -a
         ./scripts/feeds install -a
-
     - name: Generate configuration file
       run: |
         cd $OPENWRT_PATH
@@ -110,7 +106,6 @@ jobs:
         grep "CONFIG_PACKAGE_opennds" .config
         grep "CONFIG_PACKAGE_php" .config
         grep "CONFIG_PACKAGE_dnsmasq" .config
-
     - name: Download package
       id: package
       run: |
@@ -118,7 +113,6 @@ jobs:
         make download -j8
         find dl -size -1024c -exec ls -l {} \;
         find dl -size -1024c -exec rm -f {} \;
-
     - name: Compile firmware
       id: compile
       run: |
@@ -129,7 +123,6 @@ jobs:
         grep '^CONFIG_TARGET.*DEVICE.*=y' .config | sed -r 's/.*DEVICE_(.*)=y/\1/' > DEVICE_NAME
         [ -s DEVICE_NAME ] && echo "DEVICE_NAME=$(cat DEVICE_NAME)" >> $GITHUB_ENV
         echo "FILE_DATE=$(date +"%Y%m%d%H%M")" >> $GITHUB_ENV
-
     - name: Check space usage
       if: (!cancelled())
       run: df -hT
@@ -187,7 +180,6 @@ jobs:
         # Export for next steps
         echo "FIRMWARE=$PWD" >> $GITHUB_ENV
         echo "status=success" >> $GITHUB_OUTPUT
-
     - name: Upload firmware directory
       uses: actions/upload-artifact@v4
       if: steps.organize.outputs.status == 'success' && !cancelled()
@@ -249,7 +241,6 @@ jobs:
         
         cat release.txt
         echo "status=success" >> $GITHUB_OUTPUT
-
     - name: Upload firmware to release
       uses: softprops/action-gh-release@v2
       if: steps.tag.outputs.status == 'success' && !cancelled()
